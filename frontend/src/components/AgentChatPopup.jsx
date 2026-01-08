@@ -63,7 +63,7 @@ export default function AgentChatPopup({ user }) {
       return 0;
     }
   });
-  
+
   const lastMessageIdRef = useRef(0);
   const chatBodyRef = useRef(null);
   const isMountedRef = useRef(true);
@@ -134,68 +134,25 @@ export default function AgentChatPopup({ user }) {
   }, [isOpen, lastReadId, user?.role]);
 
 
-//useEffect pentru socket.io
+  //useEffect pentru socket.io
   useEffect(() => {
-  if (!CAN_CHAT_ROLES.has(user?.role)) return;
+    const socket = getChatSocket();
+    if (!socket) return;
 
-  const socket = getChatSocket();
-  if (!socket) return;
+    const onChanged = () => {
+      fetchMessages(); // REST
+    };
 
-  const onConnect = () => {
-  socket.emit('chat:join', { lastMessageId: lastMessageIdRef.current || 0 });
-};
+    socket.emit('chat:watch');
+    socket.on('chat:changed', onChanged);
+    if (isOpen) fetchMessages();
 
+    return () => {
+      socket.off('chat:changed', onChanged);
+      socket.emit('chat:unwatch');
+    };
 
-  const onReady = () => {
-    // cerem sync (ultimele mesaje / sau după lastMessageId)
-    socket.emit('chat:join', { lastMessageId: lastMessageIdRef.current || 0 });
-  };
-
-  const onSync = ({ messages: incoming } = {}) => {
-    const arr = Array.isArray(incoming) ? incoming : [];
-    if (arr.length === 0) return;
-
-    setMessages((prev) => {
-      const merged = sanitizeMessages(prev, arr);
-      const newest = merged[merged.length - 1];
-      if (newest?.id) {
-        lastMessageIdRef.current = newest.id;
-        if (!isOpen && newest.id > lastReadId) setHasUnread(true);
-      }
-      return merged;
-    });
-  };
-
-  const onNew = ({ message } = {}) => {
-    if (!message?.id) return;
-    setMessages((prev) => {
-      const merged = sanitizeMessages(prev, [message]);
-      const newest = merged[merged.length - 1];
-      if (newest?.id) {
-        lastMessageIdRef.current = newest.id;
-        if (!isOpen && newest.id > lastReadId) setHasUnread(true);
-      }
-      return merged;
-    });
-  };
-
-  socket.on('chat:ready', onReady);
-  socket.on('chat:sync_response', onSync);
-  socket.on('chat:new_message', onNew);
-  socket.on('connect', onConnect);
-
-
-  // dacă e deja conectat, cerem sync imediat
-  if (socket.connected) onReady();
-
-  return () => {
-    socket.off('chat:ready', onReady);
-    socket.off('chat:sync_response', onSync);
-    socket.off('chat:new_message', onNew);
-    socket.off('connect', onConnect);
-
-  };
-}, [user?.role, isOpen, lastReadId]);
+  }, [user?.role, isOpen, lastReadId]);
 
 
 
@@ -220,28 +177,24 @@ export default function AgentChatPopup({ user }) {
     });
   };
 
-const sendMessage = async ({ content, attachmentUrl, attachmentType }) => {
-  const socket = getChatSocket();
-  if (!socket) throw new Error('Chat socket nu este conectat.');
+  const sendMessage = async ({ content, attachmentUrl, attachmentType }) => {
+    const res = await fetch('/api/chat/messages', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        content,
+        attachmentUrl,
+        attachmentType,
+      }),
+    });
 
-  const payload = {
-    content: content?.trim() || '',
-    attachment_url: attachmentUrl || null,
-    attachment_type: attachmentUrl ? (attachmentType || 'image') : null
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data?.error || 'Nu am putut trimite mesajul');
+    }
   };
 
-  await new Promise((resolve, reject) => {
-    socket.emit('chat:send', payload, (ack) => {
-      if (!ack || ack.ok !== true) {
-        return reject(new Error(ack?.error || 'Nu am putut trimite mesajul.'));
-      }
-
-      // IMPORTANT: nu adăugăm manual mesajul aici
-      // pentru că îl primim prin event-ul "chat:new_message"
-      resolve();
-    });
-  });
-};
 
 
   const handleSubmit = async (event) => {
@@ -311,8 +264,8 @@ const sendMessage = async ({ content, attachmentUrl, attachmentType }) => {
         )}
       </button>
 
-{isOpen && (
-   <div className="mt-3 w-96 max-w-[90vw] max-h-[40vh] rounded-lg bg-white shadow-2xl border border-gray-200 flex flex-col overflow-hidden">
+      {isOpen && (
+        <div className="mt-3 w-96 max-w-[90vw] max-h-[40vh] rounded-lg bg-white shadow-2xl border border-gray-200 flex flex-col overflow-hidden">
           <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3">
             <div>
               <p className="text-sm font-semibold text-gray-900">Chatul agenților</p>

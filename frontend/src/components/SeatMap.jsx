@@ -353,7 +353,10 @@ ${isSelected ? 'animate-pulse ring-2 ring-white [animation-duration:2s]' : ''}
 
             {heldByOther && (
               <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-45 text-[11px] font-semibold uppercase">
-                Ocupat de {holdInfo?.holder_name || 'Agent'}
+                {holdInfo?.holder_name
+                  ? `Ocupat de ${holdInfo.holder_name}`
+                  : 'Ocupat online'}
+
               </div>
             )}
 

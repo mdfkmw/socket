@@ -4302,6 +4302,7 @@ export default function ReservationPage({ userRole, user }) {
           return;
         }
         setTripId(trip_id);
+        refreshIntents();
         setSelectedTrip(tripData);
         await fetchTripVehicles(tripData.id);
 

@@ -58,7 +58,10 @@ const getSeatStatusLabel = ({ activePassengers, heldByOther, heldByMe, seat, hol
   }
 
   if (heldByOther) {
-    return `Ocupat de ${holdInfo?.holder_name || 'Agent'}`;
+    return holdInfo?.holder_name
+      ? `Ocupat de ${holdInfo.holder_name}`
+      : 'Ocupat online'
+
 
   }
 
@@ -227,10 +230,12 @@ export default function SeatTimeline({ seats = [], stops = [], intentHolds = {} 
                   ) : (
                     <div className="absolute inset-0 flex items-center justify-center text-xs text-gray-400">
                       {heldByOther
-                        ? `Ocupat de ${holdInfo?.holder_name || 'Agent'}`
+                        ? (holdInfo?.holder_name
+                          ? `Ocupat de ${holdInfo.holder_name}`
+                          : 'Ocupat online')
                         : 'Liber pe tot traseul'}
-
                     </div>
+
                   )}
                 </div>
               </div>
