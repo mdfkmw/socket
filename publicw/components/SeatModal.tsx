@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { io, type Socket } from 'socket.io-client'
+
 import type {
   DiscountTypeOption,
   IntentInfo,
@@ -11,11 +13,13 @@ import type {
   SeatMapResponse,
   SeatVehicle,
 } from '@/lib/api'
-import { ApiError, createIntent, deleteIntent, fetchTripDiscountTypes, fetchTripIntents, fetchTripSeatMap, validatePromoCode } from '@/lib/api'
+import { API_BASE, ApiError, createIntent, deleteIntent, fetchTripDiscountTypes, fetchTripIntents, fetchTripSeatMap, validatePromoCode } from '@/lib/api'
+
 import { usePublicSession } from '@/components/PublicSessionProvider'
 import { formatPrice, formatRoDate } from '@/lib/format'
 import MapPreviewDialog, { type MapPreviewData } from '@/components/MapPreviewDialog'
 import { buildGoogleMapsUrls } from '@/lib/maps'
+
 
 type SeatPassenger = {
   seatId: number
@@ -94,8 +98,8 @@ export default function SeatModal({ isOpen, onClose, onConfirm, trip, travelDate
   const [discountTypesError, setDiscountTypesError] = useState<string | null>(null)
   const [passengerDetails, setPassengerDetails] = useState<Record<number, { name: string; discountTypeId: number | null }>>({})
   const lastSeatCountRef = useRef(0)
-  const intentTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
-  const seatTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+const intentsSocketRef = useRef<Socket | null>(null)
+
   const lastTripIdRef = useRef<number | null>(null)
   const previousDiscountSignatureRef = useRef<string>('')
   const showMapPreview = useCallback(
@@ -195,34 +199,74 @@ export default function SeatModal({ isOpen, onClose, onConfirm, trip, travelDate
       }
     })
 
-    if (intentTimerRef.current) {
-      clearInterval(intentTimerRef.current)
-      intentTimerRef.current = null
-    }
-    if (seatTimerRef.current) {
-      clearInterval(seatTimerRef.current)
-      seatTimerRef.current = null
-    }
+// ---- Socket.IO (în loc de polling) ----
+if (intentsSocketRef.current) {
+  try {
+    intentsSocketRef.current.removeAllListeners()
+    intentsSocketRef.current.disconnect()
+  } catch {}
+  intentsSocketRef.current = null
+}
 
-    intentTimerRef.current = setInterval(() => {
-      refreshIntents()
-    }, 2500)
+const socket = io(`${API_BASE}/intents`, {
+  withCredentials: true,
+  transports: ['websocket'],
+  reconnection: true,
+})
 
-    seatTimerRef.current = setInterval(() => {
-      reloadSeatData(false)
-    }, 7000)
+intentsSocketRef.current = socket
 
-    return () => {
-      cancelled = true
-      if (intentTimerRef.current) {
-        clearInterval(intentTimerRef.current)
-        intentTimerRef.current = null
-      }
-      if (seatTimerRef.current) {
-        clearInterval(seatTimerRef.current)
-        seatTimerRef.current = null
-      }
-    }
+const tripId = Number(trip.trip_id)
+
+const onConnect = () => {
+  console.log('[public intents socket] connected', socket.id)
+  socket.emit('intents:watch', { tripId })
+}
+
+const onDisconnect = (reason: string) => {
+  console.log('[public intents socket] disconnected:', reason)
+}
+
+const onConnectError = (err: any) => {
+  console.log('[public intents socket] connect_error:', err?.message || err)
+}
+
+const onIntentsUpdate = (payload: any = {}) => {
+  if (payload?.tripId && Number(payload.tripId) !== tripId) return
+  refreshIntents()
+}
+
+const onTripUpdate = (payload: any = {}) => {
+  if (payload?.tripId && Number(payload.tripId) !== tripId) return
+  reloadSeatData(false)
+}
+
+socket.on('connect', onConnect)
+socket.on('disconnect', onDisconnect)
+socket.on('connect_error', onConnectError)
+socket.on('intents:update', onIntentsUpdate)
+socket.on('trip:update', onTripUpdate)
+
+if (socket.connected) onConnect()
+
+return () => {
+  cancelled = true
+  try {
+    socket.emit('intents:unwatch', { tripId })
+  } catch {}
+
+  try {
+    socket.off('connect', onConnect)
+    socket.off('disconnect', onDisconnect)
+    socket.off('connect_error', onConnectError)
+    socket.off('intents:update', onIntentsUpdate)
+    socket.off('trip:update', onTripUpdate)
+    socket.disconnect()
+  } catch {}
+
+  intentsSocketRef.current = null
+}
+
   }, [isOpen, trip, reloadSeatData, refreshIntents, accountContact, hasAccountContact])
 
   useEffect(() => {
