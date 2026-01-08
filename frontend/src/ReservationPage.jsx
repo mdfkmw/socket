@@ -691,7 +691,7 @@ export default function ReservationPage({ userRole, user }) {
     const API_BASE = import.meta.env.VITE_API_URL ?? "";
     const socket = io((API_BASE || window.location.origin) + "/intents", {
       withCredentials: true,
-      transports: ["websocket"],
+      transports: ["websocket", "polling"],
       reconnection: true,
     });
 
