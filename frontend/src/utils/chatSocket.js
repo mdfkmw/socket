@@ -10,7 +10,7 @@ export function initChatSocket() {
   // important: folosim cookies (access_token), deci withCredentials trebuie true
   socket = io((API_BASE || window.location.origin) + '/chat', {
     withCredentials: true,
-    transports: ["websocket"],
+    transports: ["websocket", "polling"],
     reconnection: true,
   });
 

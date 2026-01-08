@@ -210,7 +210,7 @@ if (intentsSocketRef.current) {
 
 const socket = io(`${API_BASE}/intents`, {
   withCredentials: true,
-  transports: ['websocket'],
+  transports: ['websocket', 'polling'],
   reconnection: true,
 })
 
