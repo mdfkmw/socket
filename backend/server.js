@@ -376,7 +376,9 @@ const PORT = process.env.PORT || 5000;
 const server = http.createServer(app);
 
 const { attachSocketIO } = require('./sockets');
-attachSocketIO(server);
+const io = attachSocketIO(server);
+app.set('io', io);
+
 
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`✅ Server backend ascultă pe portul ${PORT}`);

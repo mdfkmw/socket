@@ -226,6 +226,13 @@ router.post('/messages', async (req, res) => {
     [insertedId]
   );
 
+  const io = req.app.get('io');
+if (io) {
+  io.of('/chat').to('agent_chat').emit('chat:changed', { lastMessageId: insertedId });
+}
+
+
+
   res.status(201).json({ message: insertedRows?.[0] });
 });
 

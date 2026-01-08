@@ -68,13 +68,26 @@ function ensureIntentOwner(req, res) {
   );
 
   // IMPORTANT pentru subdomenii + https
-  res.cookie(COOKIE_NAME, newToken, {
+  // IMPORTANT: cookie-ul trebuie să meargă și pe localhost (http) și pe producție (https + subdomenii)
+  const forwardedProto = (req.headers['x-forwarded-proto'] || '').toString().toLowerCase();
+  const isHttps = req.secure || forwardedProto === 'https';
+
+  const cookieOptions = {
     httpOnly: true,
-    secure: true,
-    sameSite: 'none',
-    domain: process.env.PUBLIC_INTENT_COOKIE_DOMAIN || '.pris-com.ro',
+    secure: isHttps,                 // pe http dev => false, pe https prod => true
+    sameSite: isHttps ? 'none' : 'lax',
     maxAge: COOKIE_MAX_AGE_MS,
-  });
+    path: '/',
+  };
+
+  // domain doar în producție/subdomenii (altfel strică pe localhost)
+  const domain = process.env.PUBLIC_INTENT_COOKIE_DOMAIN;
+  if (domain && isHttps) {
+    cookieOptions.domain = domain;   // ex: .pris-com.ro
+  }
+
+  res.cookie(COOKIE_NAME, newToken, cookieOptions);
+
 
   return {
     ownerId,
